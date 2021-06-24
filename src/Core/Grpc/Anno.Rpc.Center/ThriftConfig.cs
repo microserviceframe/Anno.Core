@@ -8,12 +8,21 @@ using Grpc.Core;
 
 namespace Anno.Rpc.Center
 {
+    using Anno;
     /// <summary>
     /// 系统配置
     /// </summary>
     public class ThriftConfig
     {
         private static ThriftConfig _instance = null;
+        /// <summary>
+        /// 服务上线通知事件
+        /// </summary>
+        public event ServiceNotice OnlineNotice = null;
+        /// <summary>
+        /// 服务更改通知事件
+        /// </summary>
+        public event ServiceChangeNotice ChangeNotice = null;
         private static readonly object LockHelper = new object();
 
         private static readonly object LockAdd = new object();
@@ -25,6 +34,31 @@ namespace Anno.Rpc.Center
         public Int32 Port { get; set; }
         private Int32 TimeOut { get; set; }
         public readonly List<ServiceInfo> ServiceInfoList = new List<ServiceInfo>();
+        /// <summary>
+        /// 服务MD5值
+        /// </summary>
+        internal string ServiceMd5 { get; private set; }
+        /// <summary>
+        /// 刷新Md5值
+        /// </summary>
+        internal void RefreshServiceMd5() {
+            StringBuilder stringBuilder = new StringBuilder();
+            foreach (var service in ServiceInfoList)
+            {
+                stringBuilder.Append(service.Name);
+                stringBuilder.Append("#");
+                stringBuilder.Append(service.NickName);
+                stringBuilder.Append("#");
+                stringBuilder.Append(service.Ip);
+                stringBuilder.Append("#");
+                stringBuilder.Append(service.Port);
+                stringBuilder.Append("#");
+                stringBuilder.Append(service.Timeout);
+                stringBuilder.Append("#");
+                stringBuilder.Append(service.Weight);
+            }
+            ServiceMd5 = stringBuilder.ToString().HashCode();
+        }
 
         /// <summary>
         /// 获取实例
@@ -99,6 +133,8 @@ namespace Anno.Rpc.Center
                 xmlDoc.LoadXml(xmlText.ToString());
                 xmlDoc.Save(xmlPath); //保存 
             }
+
+            this.RefreshServiceMd5();
         }
 
         /// <summary>
@@ -139,6 +175,9 @@ namespace Anno.Rpc.Center
                     };
                     int weight = input.Weight <= 0 ? 1 : input.Weight;
                     ips.Weight = weight;
+                    #region 原有服务
+                    var oldService = ServiceInfoList.FirstOrDefault(t => ips.Ip == t.Ip && ips.Port == t.Port);
+                    #endregion                    
                     ServiceInfoList.RemoveAll(t => ips.Ip == t.Ip && ips.Port == t.Port);
                     for (int w = 0; w < weight; w++) //权重
                     {
@@ -156,6 +195,16 @@ namespace Anno.Rpc.Center
                     Console.WriteLine($"{ips.NickName}已登记！");
                     Console.ResetColor();
                     Console.WriteLine($"----------------------------------------------------------------- ");
+                    #region 上线和变更通知
+                    if (OnlineNotice != null && oldService == null)
+                    {
+                        OnlineNotice.Invoke(ips, NoticeType.OnLine);
+                    }
+                    else if (ChangeNotice != null && oldService != null)
+                    {
+                        ChangeNotice.Invoke(ips, oldService);
+                    }
+                    #endregion
                 }
                 catch (Exception ex)
                 {
@@ -225,7 +274,7 @@ namespace Anno.Rpc.Center
                     try
                     {
                         var client = new BrokerService.BrokerServiceClient(new Channel($"{ip}:{port}", ChannelCredentials.Insecure));
-                       if(client.Ping(new Google.Protobuf.WellKnownTypes.Empty()).Reply)
+                        if (client.Ping(new Google.Protobuf.WellKnownTypes.Empty()).Reply)
                         {
                             return ip;
                         }

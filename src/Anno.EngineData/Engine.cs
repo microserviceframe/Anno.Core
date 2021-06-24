@@ -16,6 +16,7 @@ namespace Anno.EngineData
     /// </summary>
     public static class Engine
     {
+        private readonly static Type enumType = typeof(Enum);
         /// <summary>
         /// 转发器
         /// </summary>
@@ -86,7 +87,7 @@ namespace Anno.EngineData
                 }
                 #endregion
                 List<object> lo = new List<object>() { input };
-                module = Loader.IocLoader.Resolve<BaseModule>(routInfo.RoutModuleType); //创建实例(无参构造器)
+                module = Loader.IocLoader.Resolve<BaseModule>(routInfo.RoutModuleType);
                 var init = module.Init(input);
                 if (!init)
                 {
@@ -111,12 +112,13 @@ namespace Anno.EngineData
                     routInfo.AuthorizationFilters[i].OnAuthorization(module);
                     if (!module.Authorized)
                     {
-                        return new ActionResult()
+                        return module.ActionResult == null ? new ActionResult()
                         {
                             Status = false,
                             OutputData = 401,
                             Msg = "401,Unauthrized"
-                        };
+                        } : module.ActionResult
+                        ;
                     }
                 }
                 #endregion
@@ -124,8 +126,19 @@ namespace Anno.EngineData
                 {
                     routInfo.ActionFilters[i].OnActionExecuting(module);
                 }
-                var rltCustomize = routInfo.RoutMethod.Invoke(module, DicToParameters(routInfo.RoutMethod, input).ToArray());
-                if (rltCustomize != null && typeof(IActionResult).IsAssignableFrom(rltCustomize.GetType()))
+                #region 调用业务方法
+                object rltCustomize = null;
+                if (routInfo.ReturnTypeIsTask)
+                {
+                    var rlt = (routInfo.RoutMethod.Invoke(module, DicToParameters(routInfo.RoutMethod, input).ToArray()) as Task);
+                    rltCustomize = routInfo.RoutMethod.ReturnType.GetProperty("Result").GetValue(rlt, null);
+                }
+                else
+                {
+                    rltCustomize = routInfo.RoutMethod.Invoke(module, DicToParameters(routInfo.RoutMethod, input).ToArray());
+                }
+
+                if (routInfo.ReturnTypeIsIActionResult && rltCustomize != null)
                 {
                     module.ActionResult = rltCustomize as ActionResult;
                 }
@@ -133,6 +146,7 @@ namespace Anno.EngineData
                 {
                     module.ActionResult = new ActionResult(true, rltCustomize);
                 }
+                #endregion
                 for (int i = (routInfo.ActionFilters.Count - 1); i >= 0; i--)
                 {
                     routInfo.ActionFilters[i].OnActionExecuted(module);
@@ -191,11 +205,15 @@ namespace Anno.EngineData
                 }
                 else if (input.ContainsKey(p.Name))
                 {
-                    if (p.ParameterType.FullName.IndexOf("System", StringComparison.Ordinal) != -1)//系统基础数据类型
+                    if (p.ParameterType.FullName.StartsWith("System.Collections.Generic.List`1["))
+                    {
+                        parameters.Add(Newtonsoft.Json.JsonConvert.DeserializeObject(input[p.Name], p.ParameterType));
+                    }
+                    else if (p.ParameterType.FullName.StartsWith("System."))//系统基础数据类型
                     {
                         parameters.Add(Convert.ChangeType(input[p.Name], p.ParameterType));//枚举
                     }
-                    else if (p.ParameterType.BaseType == typeof(Enum))
+                    else if (p.ParameterType.BaseType == enumType)
                     {
 
                         parameters.Add(Enum.Parse(p.ParameterType, input[p.Name]));

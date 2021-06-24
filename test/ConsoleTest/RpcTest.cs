@@ -27,6 +27,11 @@ namespace ConsoleTest
             input.Add("router", "HelloWorldViper");
             input.Add("method", "Test0");
 
+            //input.Add("channel", "Anno.Plugs.Viper");
+            //input.Add("router", "Exam");
+            //input.Add("method", "SayHi");
+            //input.Add("name", "anno");
+
             Stopwatch sw = Stopwatch.StartNew();
             Parallel.For(0, num, i =>
             {
@@ -85,14 +90,36 @@ namespace ConsoleTest
                         input.Add("channel", "Anno.Plugs.HelloWorld");
                         input.Add("router", "HelloWorldViper");
                         input.Add("method", "Test0");
+
+                        //调用异步方法
+                        //input.Add("channel", "Anno.Plugs.HelloWorld");
+                        //input.Add("router", "HelloWorldTask");
+                        //input.Add("method", "SayHello");
+                        //input.Add("name", "Jack");
+                        //input.Add("age", "12");
+
+                        //input.Add("channel", "Anno.Plugs.Viper");
+                        //input.Add("router", "Exam");
+                        //input.Add("method", "SayHi");
+                        //input.Add("name", "anno");
+
                         var x = Connector.BrokerDns(input);
-                        //Console.WriteLine(x);
+                        Console.WriteLine(x);
                         if (x.IndexOf("true") <= 0)
                         {
                             Console.WriteLine(x);
                         }
+                        //调用异步方法Async
+                        //input.Clear();
+                        //input.Add("channel", "Anno.Plugs.HelloWorld");
+                        //input.Add("router", "HelloWorldTask");
+                        //input.Add("method", "SayHelloAsync");
+                        //input.Add("name", "Jack");
+                        //input.Add("age", "12");
+                        //x = Connector.BrokerDns(input);
+                        //Console.WriteLine(x);
                         //tasks.Add(t1);
-                        
+
                         //if (x.IndexOf("true") <= 0)
                         //{
                         //    Console.WriteLine(x);
@@ -136,6 +163,26 @@ namespace ConsoleTest
             Task.WaitAll(ts.ToArray());
         }
 
+        public void Handle3()
+        {
+            Init();
+            Dictionary<string, string> input = new Dictionary<string, string>();
+            var productsStr = Newtonsoft.Json.JsonConvert.SerializeObject(
+                new List<HelloWorldDto.ProductDto>() {
+            new HelloWorldDto.ProductDto() { 
+                CountryOfOrigin="sdf",
+                Number=3,
+                Name="x",
+                Price=9
+            }
+            });
+            input.Add("channel", "Anno.Plugs.HelloWorld");
+            input.Add("router", "HelloWorldViper");
+            input.Add("method", "AddProducts");
+            input.Add("products", productsStr);
+            var x = Connector.BrokerDns(input);
+        }
+
         public void HandleLinkNum()
         {
             //To:
@@ -174,7 +221,7 @@ namespace ConsoleTest
 
         void Init()
         {
-            DefaultConfigManager.SetDefaultConnectionPool(1000, Environment.ProcessorCount*2, 100);
+            DefaultConfigManager.SetDefaultConnectionPool(1000, Environment.ProcessorCount * 2, 100);
             DefaultConfigManager.SetDefaultConfiguration("RpcTest", "127.0.0.1", 6660, false);
         }
     }

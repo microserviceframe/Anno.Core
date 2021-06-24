@@ -4,11 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-
-//using log4net;
-//using log4net.Config;
 using System.IO;
-//using log4net.Repository;
 
 namespace Anno.Log
 {
@@ -21,7 +17,7 @@ namespace Anno.Log
         /// <summary>
         /// 日志锁
         /// </summary>
-        private static object _locker = new object();
+        private static readonly object Locker = new object();
 
         /// <summary>
         /// 
@@ -52,10 +48,19 @@ namespace Anno.Log
         {
             if (JudgeIsDebug.IsDebug)
             {
-                Console.ForegroundColor = (ConsoleColor)new Random().Next(1, 14);
-                Console.WriteLine(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss:ffff") + ":" + message);
-                Console.ResetColor();
+                WriteLine(message, (ConsoleColor)new Random().Next(1, 14));
             }
+        }
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="message"></param>
+        /// <param name="color"></param>
+        public static void WriteLine(object message, ConsoleColor color = ConsoleColor.White)
+        {
+            Console.ForegroundColor = color;
+            Console.WriteLine(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss:ffff") + ":" + message);
+            Console.ResetColor();
         }
 
         /// <summary>
@@ -130,7 +135,7 @@ namespace Anno.Log
             Task.Run(() =>
             {
                 //防止文件占用
-                lock (_locker)
+                lock (Locker)
                 {
                     string logFile = DateTime.Today.ToString("yyyy-MM-dd");
                     //目录
@@ -156,10 +161,12 @@ namespace Anno.Log
                      */
                     writer.WriteLine("------------------------------------LOG分隔符---------------------------------------------");
 
-                    writer.WriteLine($"记录时间:{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")} ");
-                    writer.WriteLine($"线程ID:[{threadId}] ");
-                    writer.WriteLine($"日志等级:{logType.ToString()} ");
-                    writer.WriteLine($"出错类:{type?.FullName} ");
+                    writer.WriteLine($"记录时间:    {DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")} ");
+                    writer.WriteLine($"线程ID:       [{threadId}] ");
+                    writer.WriteLine($"日志等级:    {logType.ToString()} ");
+                    if (type != null)
+                        writer.WriteLine($"类型:          {type?.FullName} ");
+
                     writer.WriteLine(msg);
 
                     writer.Flush();

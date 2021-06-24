@@ -13,6 +13,10 @@ namespace Anno.Rpc.Center
 {
     public static class Distribute
     {
+        /// <summary>
+        /// 服务检查通知事件
+        /// </summary>
+        public static event ServiceNotice CheckNotice = null;
         static readonly ThriftConfig Tc = ThriftConfig.CreateInstance();
         static readonly object LockHelper = new object();
         /// <summary>
@@ -22,8 +26,23 @@ namespace Anno.Rpc.Center
         /// <returns></returns>
         public static List<Micro> GetMicro(string channel)
         {
+            List<ServiceInfo> service = new List<ServiceInfo>();
+            if (channel.StartsWith("md5:"))
+            {
+                long waitTime = 19000;
+                var md5 = channel.Substring(4);
+                while (md5.Equals(Tc.ServiceMd5) && waitTime > 0)
+                {
+                    waitTime = waitTime - 10;
+                    Thread.Sleep(10);
+                }
+                service = Tc.ServiceInfoList;
+            }
+            else
+            {
+                service = Tc.ServiceInfoList.FindAll(i => i.Name.Contains(channel));
+            }
             List<Micro> msList = new List<Micro>();
-            List<ServiceInfo> service = Tc.ServiceInfoList.FindAll(i => i.Name.Contains(channel));
             service.ForEach(s =>
             {
                 Micro micro = new Micro
@@ -39,23 +58,6 @@ namespace Anno.Rpc.Center
             });
             return msList;
         }
-
-        /// <summary>
-        /// 路由管道
-        /// </summary>
-        /// <param name="channel"></param>
-        /// <returns></returns>
-        static ServiceInfo Single(string channel)
-        {
-
-            Random rd = new Random(DateTime.Now.Millisecond);
-            List<ServiceInfo> ts = Tc.ServiceInfoList.FindAll(i => i.Name.Contains(channel));
-            if (ts.Count > 0)
-            {
-                return ts[rd.Next(0, ts.Count)];
-            }
-            return null;
-        }
         /// <summary>
         /// 健康检查，如果连接不上 每秒做一次尝试。
         /// 尝试 errorCount 次失败，软删除。
@@ -67,9 +69,8 @@ namespace Anno.Rpc.Center
         public static void HealthCheck(ServiceInfo service, int errorCount = 3)
         {
             int hc = 60;//检查次数
-
-        hCheck://再次  心跳检测
             var client = new BrokerService.BrokerServiceClient(new Channel($"{service.Ip}:{service.Port}", ChannelCredentials.Insecure));
+        hCheck://再次  心跳检测
             try
             {
                 service.Checking = true;
@@ -100,6 +101,10 @@ namespace Anno.Rpc.Center
                                 Tc.ServiceInfoList.Add(service);
                             }
                         }
+                    }
+                    if (hc <= (60 - errorCount))
+                    {
+                        CheckNotice?.Invoke(service, NoticeType.RecoverHealth);
                     }
                 }
 
@@ -154,6 +159,7 @@ namespace Anno.Rpc.Center
                 {
                     //临时移除 并不从配置文件移除
                     Tc.ServiceInfoList.RemoveAll(i => i.Ip == service.Ip && i.Port == service.Port);
+                    CheckNotice?.Invoke(service, NoticeType.NotHealth);
                 }
                 else if (hc == 0) //硬删除
                 {
@@ -163,6 +169,7 @@ namespace Anno.Rpc.Center
                         {"port", service.Port.ToString()}
                     };
                     Tc.Remove(rp);
+                    CheckNotice?.Invoke(service, NoticeType.OffLine);
                     return;
                 }
 

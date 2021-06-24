@@ -171,13 +171,36 @@ namespace Anno.Rpc.Client
                 var prop = properties[i];
                 var value = prop.GetValue(input);
                 Type types = prop.PropertyType;
-                if (types.FullName.IndexOf("System.", StringComparison.Ordinal) != -1)
+                if (types.FullName.StartsWith("System.Collections.Generic.List`1["))
+                {
+                    _input.Add(prop.Name, Newtonsoft.Json.JsonConvert.SerializeObject(value));
+                }
+                else if (types.FullName.StartsWith("System."))
                 {
                     _input.Add(prop.Name, value.ToString());
                 }
                 else
                 {
                     _input.Add(prop.Name, Newtonsoft.Json.JsonConvert.SerializeObject(value));
+                }
+            }
+            var fields = input.GetType().GetFields().Where(p => p.IsPublic).ToList();
+            for (int i = 0; i < fields.Count; i++)
+            {
+                var field = fields[i];
+                var value = field.GetValue(input);
+                Type types = field.FieldType;
+                if (types.FullName.StartsWith("System.Collections.Generic.List`1["))
+                {
+                    _input.Add(field.Name, Newtonsoft.Json.JsonConvert.SerializeObject(value));
+                }
+                else if (types.FullName.StartsWith("System."))
+                {
+                    _input.Add(field.Name, value.ToString());
+                }
+                else
+                {
+                    _input.Add(field.Name, Newtonsoft.Json.JsonConvert.SerializeObject(value));
                 }
             }
             return _input;
@@ -257,6 +280,10 @@ namespace Anno.Rpc.Client
         private static BrokerCenter.Client _client = new BrokerCenter.Client(_protocol);
         private static bool connectionCenterInit = false;
         /// <summary>
+        /// 服务MD5值
+        /// </summary>
+        internal static string ServiceMd5 { get; private set; }
+        /// <summary>
         /// 更新服务缓存
         /// </summary>
         /// <param name="channel">管道</param>
@@ -265,13 +292,17 @@ namespace Anno.Rpc.Client
             #region 到DNS中心取服务信息
             try
             {
+                if (channel.Equals("cron:"))
+                {
+                    RefreshServiceMd5();
+                    channel = ServiceMd5;
+                }
                 if (!_proxyCenter.IsOpen)
                 {
                     _proxyCenter.Open();
                 }
                 DateTime now = DateTime.Now; //获取缓存时间
-                var microList = _client.GetMicro(string.Empty);
-
+                var microList = _client.GetMicro(channel);
                 #region Micro +添加到缓存
 
                 if (microList != null && microList.Count > 0)
@@ -345,7 +376,28 @@ namespace Anno.Rpc.Client
             }
             #endregion
         }
-
+        /// <summary>
+        /// 刷新Md5值
+        /// </summary>
+        internal static void RefreshServiceMd5()
+        {
+            StringBuilder stringBuilder = new StringBuilder();
+            foreach (var service in _microCaches)
+            {
+                stringBuilder.Append(service.Mi.Name);
+                stringBuilder.Append("#");
+                stringBuilder.Append(service.Mi.Nickname);
+                stringBuilder.Append("#");
+                stringBuilder.Append(service.Mi.Ip);
+                stringBuilder.Append("#");
+                stringBuilder.Append(service.Mi.Port);
+                stringBuilder.Append("#");
+                stringBuilder.Append(service.Mi.Timeout);
+                stringBuilder.Append("#");
+                stringBuilder.Append(service.Mi.Weight);
+            }
+            ServiceMd5 = "md5:" + stringBuilder.ToString().HashCode();
+        }
         #endregion
     }
 }
